@@ -1,0 +1,32 @@
+{
+  "title": "渡河之战",
+  "eyebrow": "示例规则书 · 虚构游戏",
+  "hero": "这是一本虚构的小规则书，用来展示章节稿的全部写法。",
+  "storage_key": "example-river",
+  "parts": [
+    {"id": "setup", "short": "开局", "title": "开局准备", "sub": "摆放单位", "items": ["1.0"]},
+    {"id": "flow", "short": "流程", "title": "回合流程", "sub": "选当前回合，只看这一回合要做的事", "items": ["2.0", {"ref": "@cal", "hex": "回合日历", "num": "日历"}]},
+    {"id": "move", "short": "移动", "title": "移动阶段", "sub": "当前玩家移动单位", "items": ["3.0"]},
+    {"id": "combat", "short": "战斗", "title": "战斗阶段", "sub": "选择目标，投骰结算", "items": ["4.0", {"ref": "3.2", "hex": "撤退距离"}]},
+    {"id": "ref", "short": "参考", "title": "参考资料", "sub": "胜利条件与规则号索引", "items": ["5.0", {"ref": "@qr", "hex": "速查", "num": "速查"}]}
+  ],
+  "turns": {
+    "group_header": "天",
+    "slot_header": "时段",
+    "groups": ["第 1 天", "第 2 天"],
+    "slots": [
+      {"id": "day", "tag": "昼", "label": "白天"},
+      {"id": "night", "tag": "夜", "label": "夜间", "dark": true}
+    ],
+    "columns": [
+      {"id": "a", "label": "红方"},
+      {"id": "b", "label": "蓝方"},
+      {"id": "note", "label": "提醒"}
+    ],
+    "events": {
+      "1": {"a": ["增援 2 个步兵单位从 A 区进场（§1.1）"]},
+      "3": {"b": ["增援 1 个炮兵单位从 B 区进场（§1.1）"]},
+      "4": {"note": ["本回合结束时进行胜利判定（§5.0）"]}
+    }
+  }
+}

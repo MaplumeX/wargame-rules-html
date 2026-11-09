@@ -1,0 +1,16 @@
+# 规则书受版权保护，工作目录和成品都不提交
+*.pdf
+*.PDF
+/books/
+out.html
+contact.jpg
+shots/
+pages/
+hi/
+scan/
+img/
+zoom-*.jpg
+
+__pycache__/
+*.pyc
+.DS_Store
