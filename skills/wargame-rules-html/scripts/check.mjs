@@ -103,6 +103,9 @@ if (turns) {
   await ev(`document.querySelector('.tt-all').click()`);
 }
 
+const toc = await ev(`(async()=>{const gs=[...document.querySelectorAll('.t-group')];if(!gs.length)return null;const g=gs[gs.length>1?1:0];const p=document.getElementById(g.dataset.part);scrollTo(0,p.getBoundingClientRect().top+scrollY-60);await new Promise(r=>setTimeout(r,400));const cur=gs.filter(x=>x.classList.contains('cur'));const hidden=[...document.querySelectorAll('.t-ch')].filter(x=>!x.getClientRects().length).length;return cur.length===1&&cur[0]===g&&hidden===0})()`);
+if (toc !== null) expect('目录全部展开并标出当前阶段', toc === true);
+
 await ev(`scrollTo(0,0)`); await sleep(300); await shot('desktop-top.jpg');
 const parts = await ev(`[...document.querySelectorAll('.part')].map(p=>Math.round(p.getBoundingClientRect().top+scrollY))`);
 for (let i = 0; i < Math.min(parts.length, 4); i++) { await ev(`scrollTo(0,${parts[i] - 50})`); await sleep(250); await shot(`desktop-part-${i + 1}.jpg`); }

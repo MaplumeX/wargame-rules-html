@@ -91,7 +91,52 @@
   const crumb = $('#crumb');
   const track = $('#track');
   let lastCh = '', lastSub = '', tick = false;
-  const spy = () => {
+  const groups = new Map($$('.t-group').map(g => [g.dataset.part, g]));
+  // 条目靠近侧栏上下边缘时，平滑移到中间偏上；已经在中间的不动，减少目录移动
+  const revealRow = row => {
+    if (!row || !row.getClientRects().length) return;
+    const r = row.getBoundingClientRect(), tr = track.getBoundingClientRect(), pos = (r.top - tr.top) / tr.height;
+    if (pos >= .15 && pos <= .65) return;
+    track.scrollTo({ top: track.scrollTop + r.top - tr.top - tr.height * .35, behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth' });
+  };
+  // 目录只在页面停下后更新，滚动途中经过的章节不会让列表展开、收起或跟着滚动
+  let wantPart = '', wantCh = '', wantSub = '', wantCrumb = '', lastGroup = '', tocTimer = 0, jumpLink = null, jumpY = 0;
+  const applyToc = () => {
+    if (wantPart !== lastGroup) {
+      if (groups.get(lastGroup)) groups.get(lastGroup).classList.remove('cur');
+      if (groups.get(wantPart)) groups.get(wantPart).classList.add('cur');
+      lastGroup = wantPart;
+    }
+    const chChanged = wantCh !== lastCh;
+    if (chChanged) {
+      if (chItems.get(lastCh)) chItems.get(lastCh).classList.remove('on');
+      if (chItems.get(wantCh)) chItems.get(wantCh).classList.add('on');
+      lastCh = wantCh;
+      crumb.textContent = wantCrumb;
+    }
+    if (wantSub !== lastSub) {
+      if (subLinks.get(lastSub)) subLinks.get(lastSub).classList.remove('on');
+      if (subLinks.get(wantSub)) subLinks.get(wantSub).classList.add('on');
+      lastSub = wantSub;
+    }
+    const chRow = chItems.get(lastCh) ? chItems.get(lastCh).firstElementChild : null;
+    if (jumpLink) {
+      // 点目录跳转：先抵消小节列表收放造成的位移，避免跳动，再把条目移到合适的位置
+      const clicked = jumpLink.getClientRects().length ? jumpLink : null;
+      if (clicked) track.scrollTop += clicked.getBoundingClientRect().top - jumpY;
+      revealRow(clicked || chRow);
+      jumpLink = null;
+    } else if (chChanged) revealRow(chRow);
+  };
+  const queueToc = delay => { clearTimeout(tocTimer); tocTimer = setTimeout(applyToc, delay); };
+  track.addEventListener('click', e => {
+    const a = e.target.closest('a');
+    if (!a) return;
+    jumpLink = a;
+    jumpY = a.getBoundingClientRect().top;
+    queueToc(300);
+  });
+  const spy = first => {
     tick = false;
     let cur = null;
     const lim = (parseInt(getComputedStyle(root).getPropertyValue('--stick')) || 44) + 46;
@@ -105,23 +150,14 @@
       lastPart = partId;
     }
     const ch = cur ? cur.closest('section.top') : null;
-    const chId = ch ? ch.id : '';
-    const subId = cur && !cur.classList.contains('top') ? cur.id : '';
-    if (chId !== lastCh) {
-      if (lastCh && chItems.get(lastCh)) chItems.get(lastCh).classList.remove('on');
-      const li = chItems.get(chId);
-      if (li) { li.classList.add('on'); const r = li.getBoundingClientRect(), tr = track.getBoundingClientRect(); if (r.top < tr.top || r.bottom > tr.bottom) track.scrollTop += r.top - tr.top - 40; }
-      lastCh = chId;
-      crumb.textContent = ch ? ch.dataset.label : document.title.replace(/ 规则书$/, '');
-    }
-    if (subId !== lastSub) {
-      if (subLinks.get(lastSub)) subLinks.get(lastSub).classList.remove('on');
-      if (subLinks.get(subId)) subLinks.get(subId).classList.add('on');
-      lastSub = subId;
-    }
+    wantPart = partId;
+    wantCh = ch ? ch.id : '';
+    wantSub = cur && !cur.classList.contains('top') ? cur.id : '';
+    wantCrumb = ch ? ch.dataset.label : document.title.replace(/ 规则书$/, '');
+    if (first === true) applyToc(); else queueToc(120);
   };
   addEventListener('scroll', () => { if (!tick) { tick = true; requestAnimationFrame(spy); } }, { passive: true });
-  spy();
+  spy(true);
 
   // 搜索
   const ownText = s => {

@@ -289,7 +289,7 @@ body = linkify(body)
 # 目录
 toc = ''
 for p in LAYOUT:
-    toc += f'<li class="t-part"><a href="#p-{p["id"]}">{p["title"]}</a></li>'
+    toc += f'<li class="t-group" data-part="p-{p["id"]}" style="--pc:{p["color"]}"><div class="t-part"><a href="#p-{p["id"]}">{p["title"]}</a></div><ol class="t-list">'
     for it in p['items']:
         r = rid(it['ref'])
         if r not in nodes:
@@ -299,6 +299,7 @@ for p in LAYOUT:
         n = short_num or '补'
         subs = ''.join(f'<a href="#{k.id}"><b>{k.num}</b>{html.escape(k.title)}</a>' for k in c.kids if k.id not in claimed)
         toc += f'<li class="t-ch" data-id="{c.id}"><a href="#{c.id}"><span class="n">{n}</span>{html.escape(c.title)}</a><div class="t-sub">{subs}</div></li>'
+    toc += '</ol></li>'
 
 phasebar = ''.join(f'<a href="#p-{p["id"]}">{p["short"]}</a>' for p in LAYOUT)
 chip = '<a id="turn-chip" href="#turn-track">选择回合</a>' if turns else ''
@@ -322,13 +323,13 @@ def hexsvg(per_row, label_left, cls):
     R, W = 46, 46 * math.sqrt(3)
     parts = []
 
-    def hx(cx, cy, color, tok, num, ttl):
+    def hx(cx, cy, color, tok, num, ttl, solid=False):
         pts = ' '.join(f'{cx + R * math.cos(math.radians(a)):.1f},{cy + R * math.sin(math.radians(a)):.1f}' for a in range(30, 390, 60))
-        parts.append(f'<a class="hx" style="--pc:{color}" href="#{rid(tok)}" aria-label="{html.escape(ttl, quote=True)}"><polygon points="{pts}"/><text class="hn" x="{cx:.1f}" y="{cy - 2:.1f}">{html.escape(num)}</text><text class="ht" x="{cx:.1f}" y="{cy + 18:.1f}">{html.escape(ttl)}</text></a>')
+        parts.append(f'<a class="hx{" solid" if solid else ""}" style="--pc:{color}" href="#{rid(tok)}" aria-label="{html.escape(ttl, quote=True)}"><polygon points="{pts}"/><text class="hn" x="{cx:.1f}" y="{cy - 2:.1f}">{html.escape(num)}</text><text class="ht" x="{cx:.1f}" y="{cy + 18:.1f}">{html.escape(ttl)}</text></a>')
 
     lw = 112 if label_left else 0
     y, row, widest = 0, 0, 1
-    for p in LAYOUT:
+    for pi, p in enumerate(LAYOUT):
         hs = hex_items(p)
         if not hs:
             continue
@@ -342,7 +343,7 @@ def hexsvg(per_row, label_left, cls):
         for ch in chunks:
             off = W / 2 if row % 2 else 0
             for i, (tok, num, ttl) in enumerate(ch):
-                hx(lw + off + W / 2 + 2 + i * W, y + R + 2, p['color'], tok, num, ttl)
+                hx(lw + off + W / 2 + 2 + i * W, y + R + 2, p['color'], tok, num, ttl, solid=pi % 2 == 1)
             widest = max(widest, len(ch))
             y += 1.5 * R
             row += 1
