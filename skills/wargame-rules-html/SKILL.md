@@ -1,7 +1,7 @@
 ---
 name: wargame-rules-html
 description: 把兵棋、桌游的规则书（扫描版或文字版 PDF）整理成单文件、可离线打开、便于对局查阅的交互式 HTML，包括按对局阶段重编章节、规则互链、全文搜索、回合日历、速查卡和原文对照。当用户想把规则书、规则手册、说明书、rulebook 转成网页或 HTML，或者想让规则更易懂、对局时更好查、做规则速查时使用，即使用户没有明确提到 HTML。Converts wargame and board game rulebooks (scanned or text PDFs) into a single-file, offline, play-oriented interactive HTML reference. Use whenever someone wants a rulebook turned into a web page or made easier to read and look up during play.
-compatibility: 需要能运行命令行和查看图片。依赖 Python 3.9+（markdown、Pillow）、poppler-utils；浏览器检查需要 Node 22+ 和 Chrome/Chromium，可选。
+compatibility: 需要能运行命令行和查看图片。依赖 Python 3.9+（markdown、Pillow）、poppler-utils；内嵌标题字体需要 fonttools、brotli 和本机的思源宋体，可选；浏览器检查需要 Node 22+ 和 Chrome/Chromium，可选。
 ---
 
 # 规则书整理成 HTML
@@ -77,7 +77,7 @@ python3 scripts/build.py <book-dir>
 node scripts/check.mjs <book-dir>/out.html
 ```
 
-`build.py` 校验引用、编排和残留标记，出错时返回非 0。`check.mjs` 跑交互和版式检查，并在 `shots/` 生成桌面和手机截图，要实际查看这些截图。没有浏览器或 Node 时跳过这步，并告诉用户没有测过。
+`build.py` 校验引用、编排和残留标记，出错时返回非 0。它还会输出标题字体的情况：如果显示“系统字体”，告诉用户可以安装思源宋体和 fonttools 后重新构建，标题会更好看。`check.mjs` 跑交互和版式检查，并在 `shots/` 生成桌面和手机截图，要实际查看这些截图。没有浏览器或 Node 时跳过这步，并告诉用户没有测过。
 
 页面样式问题可查 `references/troubleshooting.md`。
 

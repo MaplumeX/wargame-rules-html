@@ -23,7 +23,11 @@ except ImportError:
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 ASSETS = os.path.join(HERE, '..', 'assets')
-PALETTE = ['#8a9580', '#515a6d', '#536a4b', '#17707c', '#a32237', '#7a1a2b', '#6f8350', '#6b7488']
+sys.path.insert(0, HERE)
+from fonts import find_display_font, subset_display_font  # noqa: E402
+
+# 阶段配色：明度相近、都够深，配白字时对比度足够，放在一起也协调
+PALETTE = ['#7a6743', '#4a5670', '#4e6b45', '#1d6b75', '#a32237', '#6a4f6e', '#8a5a32', '#5a6478']
 LABEL = {'note': '注意', 'except': '例外', 'key': '要点', 'explain': '说明', 'designer': '设计师笔记'}
 
 ap = argparse.ArgumentParser(description='构建规则书 HTML')
@@ -47,9 +51,36 @@ has_scans = bool(scan_files)
 errors, warnings = [], []
 
 
+NUM_CHARS = r'[\d\s+\-–—−×/.:,%≤≥<>±~～()]'
+NUM_CELL = re.compile(rf'{NUM_CHARS}*\d{NUM_CHARS}*|[—–\-]')
+CELL = re.compile(r'<(t[hd])([^>]*)>(.*?)</\1>', re.S)
+
+
+def mark_numeric(tbl):
+    """整列都是数字、骰点、修正值的列加 class="nm"，用数字字体居中排。"""
+    grid = [CELL.findall(r) for r in re.findall(r'<tr>(.*?)</tr>', tbl, flags=re.S)]
+    body = [g for g in grid if g and g[0][0] == 'td']
+    numeric = set()
+    for c in range(max((len(g) for g in grid), default=0)):
+        vals = [v for v in (re.sub(r'<[^>]+>', '', g[c][2]).strip() for g in body if c < len(g)) if v]
+        if vals and all(NUM_CELL.fullmatch(v) for v in vals) and any(re.search(r'\d', v) for v in vals):
+            numeric.add(c)
+    if not numeric:
+        return tbl
+
+    def row(m):
+        col = iter(range(10 ** 6))
+
+        def cell(c):
+            cls = ' class="nm"' if next(col) in numeric else ''
+            return f'<{c[1]}{cls}{c[2]}>{c[3]}</{c[1]}>'
+        return '<tr>' + CELL.sub(cell, m[1]) + '</tr>'
+    return re.sub(r'<tr>(.*?)</tr>', row, tbl, flags=re.S)
+
+
 def md(t):
     h = markdown.markdown(t, extensions=['tables', 'sane_lists'])
-    return re.sub(r'<table>(.*?)</table>', r'<div class="tw"><table>\1</table></div>', h, flags=re.S)
+    return re.sub(r'<table>(.*?)</table>', lambda m: f'<div class="tw"><table>{mark_numeric(m[1])}</table></div>', h, flags=re.S)
 
 
 def img_tag(name, alt):
@@ -275,13 +306,25 @@ for c in numbered:
     ix += f'<div><a class="rc" href="#{c.id}">{c.num} {html.escape(c.title)}</a><span class="rs">{subs}</span></div>'
 ix += '</div>'
 
+def chip_num(n):
+    """目录、扉页里的编号：章取主号（3.0 → 3），节照写，补充章节写“补”。"""
+    if not n.num:
+        return '补'
+    return re.match(r'[^.]+', n.num)[0] if n.lv == 1 else n.num
+
+
 # 正文
 body = ''
-for p in LAYOUT:
-    inner = ''.join(render(nodes[rid(it['ref'])], top=True) for it in p['items'] if rid(it['ref']) in nodes)
+for pi, p in enumerate(LAYOUT, 1):
+    refs = [nodes[rid(it['ref'])] for it in p['items'] if rid(it['ref']) in nodes]
+    inner = ''.join(render(n, top=True) for n in refs)
     intro = render_block(parts_src.get(p['id'], ''))
     sub = f'<p>{p["sub"]}</p>' if p.get('sub') else ''
-    body += f'<div class="part" id="p-{p["id"]}" style="--pc:{p["color"]}"><header class="part-h"><h1>{p["title"]}</h1>{sub}</header><div class="part-i">{intro}</div>{inner}</div>'
+    ptoc = ''
+    if len(refs) > 1:
+        ptoc = '<nav class="part-toc" aria-label="本部分内容">' + ''.join(f'<a href="#{n.id}"><span class="cn">{chip_num(n)}</span>{html.escape(n.title)}</a>' for n in refs) + '</nav>'
+    head = f'<header class="part-h"><div class="part-no" aria-hidden="true">{pi}</div><div class="part-t"><div class="part-k">第 {pi} 部分</div><h1>{p["title"]}</h1>{sub}</div>{ptoc}</header>'
+    body += f'<div class="part" id="p-{p["id"]}" style="--pc:{p["color"]}">{head}<div class="part-i">{intro}</div>{inner}</div>'
 for a, b in {'<p>%%CAL%%</p>': cal_html, '<p>%%INDEX%%</p>': ix, '%%TRACK%%': track_html}.items():
     body = body.replace(a, b)
 body = linkify(body)
@@ -295,13 +338,11 @@ for p in LAYOUT:
         if r not in nodes:
             continue
         c = nodes[r]
-        short_num = re.match(r'[^.]+', c.num)[0] if (c.num and c.lv == 1) else c.num
-        n = short_num or '补'
         subs = ''.join(f'<a href="#{k.id}"><b>{k.num}</b>{html.escape(k.title)}</a>' for k in c.kids if k.id not in claimed)
-        toc += f'<li class="t-ch" data-id="{c.id}"><a href="#{c.id}"><span class="n">{n}</span>{html.escape(c.title)}</a><div class="t-sub">{subs}</div></li>'
+        toc += f'<li class="t-ch" data-id="{c.id}"><a href="#{c.id}"><span class="n">{chip_num(c)}</span>{html.escape(c.title)}</a><div class="t-sub">{subs}</div></li>'
     toc += '</ol></li>'
 
-phasebar = ''.join(f'<a href="#p-{p["id"]}">{p["short"]}</a>' for p in LAYOUT)
+phasebar = ''.join(f'<a href="#p-{p["id"]}" style="--pc:{p["color"]}">{p["short"]}</a>' for p in LAYOUT)
 ARROW = '<svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><path d="{}" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>'
 chip = ''
 if turns:
@@ -332,39 +373,63 @@ def hex_items(p):
     return out
 
 
-def hexsvg(per_row, label_left, cls):
+def hexsvg(per_row, desktop, cls):
+    """首页章节地图：每章是一枚放在六角格地图上的算子。
+    桌面版画出整张地图网格，格子带四位坐标（列行），向右渐隐；手机版只画算子。"""
     R, W = 46, 46 * math.sqrt(3)
-    parts = []
+    lw = 112 if desktop else 0
 
-    def hx(cx, cy, color, tok, num, ttl, solid=False):
-        pts = ' '.join(f'{cx + R * math.cos(math.radians(a)):.1f},{cy + R * math.sin(math.radians(a)):.1f}' for a in range(30, 390, 60))
-        parts.append(f'<a class="hx{" solid" if solid else ""}" style="--pc:{color}" href="#{rid(tok)}" aria-label="{html.escape(ttl, quote=True)}"><polygon points="{pts}"/><text class="hn" x="{cx:.1f}" y="{cy - 2:.1f}">{html.escape(num)}</text><text class="ht" x="{cx:.1f}" y="{cy + 18:.1f}">{html.escape(ttl)}</text></a>')
+    def pts(cx, cy, r):
+        return ' '.join(f'{cx + r * math.cos(math.radians(a)):.1f},{cy + r * math.sin(math.radians(a)):.1f}' for a in range(30, 390, 60))
 
-    lw = 112 if label_left else 0
+    def col_x(row, col):
+        return lw + (W / 2 if row % 2 else 0) + W / 2 + 2 + col * W
+
+    def coord(cx, cy, col, row):
+        return f'<text class="hc" x="{cx:.1f}" y="{cy - 26:.1f}">{col + 1:02d}{row + 1:02d}</text>' if desktop else ''
+
+    labels, counters, rows = [], [], []  # rows：每行的（奇偶，圆心 y）
     y, row, widest = 0, 0, 1
-    for pi, p in enumerate(LAYOUT):
+    for pi, p in enumerate(LAYOUT, 1):
         hs = hex_items(p)
         if not hs:
             continue
-        chunks = [hs[i:i + per_row] for i in range(0, len(hs), per_row)]
-        if label_left:
-            parts.append(f'<a class="hl-a" href="#p-{p["id"]}"><text class="hl" x="0" y="{y + R + 7:.1f}">{p["short"]}</text></a>')
-        else:
-            parts.append(f'<a class="hl-a" href="#p-{p["id"]}"><text class="hl" x="2" y="{y + 18:.1f}">{p["short"]}</text></a>')
+        lx, ly = (0, y + R + 7) if desktop else (2, y + 18)
+        labels.append(f'<a class="hl-a" style="--pc:{p["color"]}" href="#p-{p["id"]}"><text class="hl" x="{lx}" y="{ly:.1f}"><tspan class="hl-n">{pi}</tspan> {html.escape(p["short"])}</text></a>')
+        if not desktop:
             y += 26
             row = 0
-        for ch in chunks:
-            off = W / 2 if row % 2 else 0
-            for i, (tok, num, ttl) in enumerate(ch):
-                hx(lw + off + W / 2 + 2 + i * W, y + R + 2, p['color'], tok, num, ttl, solid=pi % 2 == 1)
-            widest = max(widest, len(ch))
+        for i in range(0, len(hs), per_row):
+            cy = y + R + 2
+            rows.append((row, cy))
+            for col, (tok, num, ttl) in enumerate(hs[i:i + per_row]):
+                cx = col_x(row, col)
+                counters.append(
+                    f'<a class="hx" style="--pc:{p["color"]}" href="#{rid(tok)}" aria-label="{html.escape(ttl, quote=True)}">'
+                    f'<polygon class="face" points="{pts(cx, cy, R - 3)}"/><polygon class="inner" points="{pts(cx, cy, R - 7)}"/>'
+                    f'{coord(cx, cy, col, len(rows) - 1)}'
+                    f'<text class="hn" x="{cx:.1f}" y="{cy - 2:.1f}">{html.escape(num)}</text>'
+                    f'<text class="ht" x="{cx:.1f}" y="{cy + 16:.1f}">{html.escape(ttl)}</text></a>')
+            widest = max(widest, len(hs[i:i + per_row]))
             y += 1.5 * R
             row += 1
-        if not label_left:
+        if not desktop:
             y += 0.5 * R + 10
-    vh = y + 0.5 * R + 6 if label_left else y
     vw = lw + (widest + .5) * W + 6
-    return f'<svg class="{cls}" style="max-width:{vw:.0f}px" viewBox="0 0 {vw:.0f} {vh:.0f}" role="img" aria-label="章节地图">{"".join(parts)}</svg>'
+    vh = y + 0.5 * R + 6 if desktop else y
+    grid = ''
+    if desktop:
+        vw = max(vw, 720)
+        cells = ''
+        for ri, (parity, cy) in enumerate(rows):
+            for col in range(int((vw - lw) // W) + 1):
+                cx = col_x(parity, col)
+                cells += f'<polygon points="{pts(cx, cy, R)}"/>{coord(cx, cy, col, ri)}'
+        fade = (lw + (widest + 1) * W) / vw
+        grid = (f'<defs><linearGradient id="hexfade"><stop offset="{fade:.2f}" stop-color="#fff"/><stop offset="1" stop-color="#fff" stop-opacity="0"/></linearGradient>'
+                f'<mask id="hexmask"><rect width="{vw:.0f}" height="{vh:.0f}" fill="url(#hexfade)"/></mask></defs>'
+                f'<g class="grid" mask="url(#hexmask)">{cells}</g>')
+    return f'<svg class="{cls}" style="max-width:{vw:.0f}px" viewBox="0 0 {vw:.0f} {vh:.0f}" role="img" aria-label="章节地图">{grid}{"".join(labels)}{"".join(counters)}</svg>'
 
 
 offset = int(book.get('page_offset', 0))
@@ -375,11 +440,29 @@ for f in scan_files:
     scans += f'<script type="text/plain" id="scan-{n}">data:image/webp;base64,{b}</script>\n'
 last_page = int(book.get('last_printed_page', len(scan_files) - offset))
 
+# 字体：数字字体随 skill 附带；标题字体从本机找思源宋体，只取标题用到的字
+hero = book.get('hero', '规则书整理版，按对局顺序重新编排。规则做了改写，含义和数值以原文为准。')
+num_font = base64.b64encode(open(os.path.join(ASSETS, 'fonts', 'num.woff2'), 'rb').read()).decode()
+font_css = f'@font-face{{font-family:"RB Num";src:url(data:font/woff2;base64,{num_font}) format("woff2");font-weight:100 900;font-display:block}}\n'
+font_note = '标题字体：系统字体'
+display_cfg = book.get('fonts', {}).get('display', 'auto')
+if display_cfg is not False:
+    font_path = find_display_font() if display_cfg == 'auto' else os.path.join(B, os.path.expanduser(display_cfg))
+    if not font_path or not os.path.exists(font_path):
+        warnings.append('没有找到思源宋体（Noto Serif CJK / Source Han Serif，Bold），标题退回系统字体。安装后重新构建，或在 book.json 的 fonts.display 写字体文件路径')
+    else:
+        display_text = book['title'] + ''.join(p['title'] for p in LAYOUT) + ''.join(n.title for n in nodes.values() if n.lv <= 2)
+        uri, fmt, count = subset_display_font(font_path, display_text, os.path.join(B, '.cache', 'fonts'))
+        if uri:
+            font_css += f'@font-face{{font-family:"RB Display";src:url({uri}) format("{fmt}");font-weight:100 900;font-display:block}}\n'
+            font_note = f'标题字体：{os.path.basename(font_path)}，{count} 字，{len(uri) * 3 / 4 / 1024:.0f} KB'
+        else:
+            warnings.append(f'标题字体没有内嵌，退回系统字体：{fmt}')
+
 cfg = {'offset': offset, 'firstPage': int(book.get('first_printed_page', 1)), 'lastPage': last_page, 'storage': book.get('storage_key', 'rulebook'), 'turns': turn_total, 'aliases': aliases}
 t = open(os.path.join(ASSETS, 'template.html'), encoding='utf8').read()
 js = f'const BOOK = {json.dumps(cfg)};\n' + open(os.path.join(ASSETS, 'app.js'), encoding='utf8').read()
-hero = book.get('hero', '规则书整理版，按对局顺序重新编排。规则做了改写，含义和数值以原文为准。')
-for k, v in {'{{TITLE}}': html.escape(book['title']), '{{EYEBROW}}': html.escape(book.get('eyebrow', '')), '{{HERO}}': html.escape(hero), '{{TOC}}': toc, '{{HEX_D}}': hexsvg(8, True, 'd'), '{{HEX_M}}': hexsvg(4, False, 'm'), '{{PHASEBAR}}': phasebar, '{{TURN_CHIP}}': chip, '{{BODY}}': body, '{{SCANS}}': scans, '{{JS}}': js}.items():
+for k, v in {'{{FONTS}}': font_css, '{{TITLE}}': html.escape(book['title']), '{{EYEBROW}}': html.escape(book.get('eyebrow', '')), '{{HERO}}': html.escape(hero), '{{TOC}}': toc, '{{HEX_D}}': hexsvg(8, True, 'd'), '{{HEX_M}}': hexsvg(4, False, 'm'), '{{PHASEBAR}}': phasebar, '{{TURN_CHIP}}': chip, '{{BODY}}': body, '{{SCANS}}': scans, '{{JS}}': js}.items():
     t = t.replace(k, v)
 os.makedirs(os.path.dirname(OUT), exist_ok=True)
 open(OUT, 'w', encoding='utf8').write(t)
@@ -399,6 +482,7 @@ if unused:
     warnings.append('裁了但没用到的图片：' + ', '.join(unused))
 print(f'章节 {len(tree)}，小节 {len(nodes)}，图片 {len(used_imgs)}，扫描页 {len(scan_files)}，回合 {turn_total}')
 print('重复的规则号：', dups or '无')
+print(font_note)
 print(f'大小 {os.path.getsize(OUT) / 1e6:.2f} MB → {OUT}')
 for w in sorted(set(warnings)):
     print('警告：', w)

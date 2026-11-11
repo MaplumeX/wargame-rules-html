@@ -25,9 +25,14 @@
 
 ```bash
 pip install markdown Pillow
+pip install fonttools brotli   # 可选：内嵌标题字体
 # 另需 poppler-utils（提供 pdfinfo、pdftotext、pdftoppm）
 # 浏览器检查需要 Node 22+ 和 Chrome/Chromium，可选
 ```
+
+标题使用思源宋体（Noto Serif CJK SC / Source Han Serif SC 的 Bold）。构建时会在本机字体目录里查找，只取标题用到的字内嵌进页面，通常只有几十到两百 KB。没装这款字体或缺少 fonttools 时，标题退回读者系统里的字体，构建照常完成。Debian/Ubuntu 可用 `apt install fonts-noto-cjk` 安装，其他系统从 [Noto CJK](https://github.com/notofonts/noto-cjk) 下载。
+
+规则号、表格数字使用随 skill 附带的 Barlow Semi Condensed（SIL OFL，见 `assets/fonts/OFL.txt`），不需要额外安装。
 
 ## 使用
 

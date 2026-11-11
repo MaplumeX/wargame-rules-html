@@ -10,6 +10,7 @@ hi/
 scan/
 img/
 zoom-*.jpg
+.cache/
 
 __pycache__/
 *.pyc
