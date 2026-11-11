@@ -313,6 +313,12 @@ def chip_num(n):
     return re.match(r'[^.]+', n.num)[0] if n.lv == 1 else n.num
 
 
+# 扉页徽章：和首页地图上的算子同一画法（实色面 + 内圈细线）
+PART_NO = ('<svg class="part-no" viewBox="0 0 62 72" aria-hidden="true">'
+           '<polygon class="face" points="31,1 61,18.5 61,53.5 31,71 1,53.5 1,18.5"/>'
+           '<polygon class="inner" points="31,5.5 57,20.7 57,51.3 31,66.5 5,51.3 5,20.7"/>'
+           '<text x="31" y="47">{}</text></svg>')
+
 # 正文
 body = ''
 for pi, p in enumerate(LAYOUT, 1):
@@ -323,7 +329,7 @@ for pi, p in enumerate(LAYOUT, 1):
     ptoc = ''
     if len(refs) > 1:
         ptoc = '<nav class="part-toc" aria-label="本部分内容">' + ''.join(f'<a href="#{n.id}"><span class="cn">{chip_num(n)}</span>{html.escape(n.title)}</a>' for n in refs) + '</nav>'
-    head = f'<header class="part-h"><div class="part-no" aria-hidden="true">{pi}</div><div class="part-t"><div class="part-k">第 {pi} 部分</div><h1>{p["title"]}</h1>{sub}</div>{ptoc}</header>'
+    head = f'<header class="part-h">{PART_NO.format(pi)}<div class="part-t"><div class="part-k">第 {pi} 部分</div><h1>{p["title"]}</h1>{sub}</div>{ptoc}</header>'
     body += f'<div class="part" id="p-{p["id"]}" style="--pc:{p["color"]}">{head}<div class="part-i">{intro}</div>{inner}</div>'
 for a, b in {'<p>%%CAL%%</p>': cal_html, '<p>%%INDEX%%</p>': ix, '%%TRACK%%': track_html}.items():
     body = body.replace(a, b)
@@ -385,10 +391,29 @@ def hexsvg(per_row, desktop, cls):
     def col_x(row, col):
         return lw + (W / 2 if row % 2 else 0) + W / 2 + 2 + col * W
 
+    def terrain(col, row):
+        """空格子的地形：用两组正弦叠出成片的林地和丘陵，结果固定，每次构建都一样。"""
+        v = math.sin(col * 1.3 + row * 0.8) + math.cos(col * 0.55 - row * 1.25 + 1.4)
+        return ' class="tw"' if v > 1.1 else ' class="tr"' if v < -1.2 else ''
+
+    def river(rows, widest):
+        """一条沿格边走的河：每行走一段竖边，再沿斜边拐到下一行，从算子右边两格开始。"""
+        if not rows:
+            return ''
+        x = col_x(rows[0][0], widest + 1) - W / 2
+        cy = rows[0][1]
+        d = f'M{x - W / 2:.1f},{cy - R:.1f}L{x:.1f},{cy - R / 2:.1f}'
+        for i, (_, cy) in enumerate(rows):
+            d += f'L{x:.1f},{cy + R / 2:.1f}'
+            x += W / 2 if (i % 3) != 1 else -W / 2
+            d += f'L{x:.1f},{cy + R:.1f}'
+        return f'<path class="river" d="{d}"/>'
+
     def coord(cx, cy, col, row):
         return f'<text class="hc" x="{cx:.1f}" y="{cy - 26:.1f}">{col + 1:02d}{row + 1:02d}</text>' if desktop else ''
 
     labels, counters, rows = [], [], []  # rows：每行的（奇偶，圆心 y）
+    occupied = set()  # 放了算子的格子：（行序号，列）
     y, row, widest = 0, 0, 1
     for pi, p in enumerate(LAYOUT, 1):
         hs = hex_items(p)
@@ -404,6 +429,7 @@ def hexsvg(per_row, desktop, cls):
             rows.append((row, cy))
             for col, (tok, num, ttl) in enumerate(hs[i:i + per_row]):
                 cx = col_x(row, col)
+                occupied.add((len(rows) - 1, col))
                 counters.append(
                     f'<a class="hx" style="--pc:{p["color"]}" href="#{rid(tok)}" aria-label="{html.escape(ttl, quote=True)}">'
                     f'<polygon class="face" points="{pts(cx, cy, R - 3)}"/><polygon class="inner" points="{pts(cx, cy, R - 7)}"/>'
@@ -424,11 +450,12 @@ def hexsvg(per_row, desktop, cls):
         for ri, (parity, cy) in enumerate(rows):
             for col in range(int((vw - lw) // W) + 1):
                 cx = col_x(parity, col)
-                cells += f'<polygon points="{pts(cx, cy, R)}"/>{coord(cx, cy, col, ri)}'
+                t = '' if (ri, col) in occupied else terrain(col, ri)
+                cells += f'<polygon{t} points="{pts(cx, cy, R)}"/>{coord(cx, cy, col, ri)}'
         fade = (lw + (widest + 1) * W) / vw
         grid = (f'<defs><linearGradient id="hexfade"><stop offset="{fade:.2f}" stop-color="#fff"/><stop offset="1" stop-color="#fff" stop-opacity="0"/></linearGradient>'
                 f'<mask id="hexmask"><rect width="{vw:.0f}" height="{vh:.0f}" fill="url(#hexfade)"/></mask></defs>'
-                f'<g class="grid" mask="url(#hexmask)">{cells}</g>')
+                f'<g class="grid" mask="url(#hexmask)">{cells}{river(rows, widest)}</g>')
     return f'<svg class="{cls}" style="max-width:{vw:.0f}px" viewBox="0 0 {vw:.0f} {vh:.0f}" role="img" aria-label="章节地图">{grid}{"".join(labels)}{"".join(counters)}</svg>'
 
 
