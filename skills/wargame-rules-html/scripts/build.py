@@ -302,7 +302,20 @@ for p in LAYOUT:
     toc += '</ol></li>'
 
 phasebar = ''.join(f'<a href="#p-{p["id"]}">{p["short"]}</a>' for p in LAYOUT)
-chip = '<a id="turn-chip" href="#turn-track">选择回合</a>' if turns else ''
+ARROW = '<svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><path d="{}" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>'
+chip = ''
+if turns:
+    chip = ('<span class="turn">'
+            f'<button type="button" id="turn-prev" aria-label="上一回合" hidden>{ARROW.format("M10 3 5 8l5 5")}</button>'
+            '<a id="turn-chip" href="#turn-track">选择回合</a>'
+            f'<button type="button" id="turn-next" aria-label="下一回合"><span id="turn-go">开始</span>{ARROW.format("m6 3 5 5-5 5")}</button>'
+            '</span>')
+
+# 搜索别名：每组是一串互为同义的词
+aliases = book.get('aliases', [])
+if not (isinstance(aliases, list) and all(isinstance(g, list) and len(g) > 1 and all(isinstance(w, str) and w.strip() for w in g) for g in aliases)):
+    errors.append('book.json 的 aliases 应是词组的列表，每组至少两个词，例如 [["ZOC", "控制区"]]')
+    aliases = []
 
 
 def hex_items(p):
@@ -362,7 +375,7 @@ for f in scan_files:
     scans += f'<script type="text/plain" id="scan-{n}">data:image/webp;base64,{b}</script>\n'
 last_page = int(book.get('last_printed_page', len(scan_files) - offset))
 
-cfg = {'offset': offset, 'firstPage': int(book.get('first_printed_page', 1)), 'lastPage': last_page, 'storage': book.get('storage_key', 'rulebook'), 'turns': turn_total}
+cfg = {'offset': offset, 'firstPage': int(book.get('first_printed_page', 1)), 'lastPage': last_page, 'storage': book.get('storage_key', 'rulebook'), 'turns': turn_total, 'aliases': aliases}
 t = open(os.path.join(ASSETS, 'template.html'), encoding='utf8').read()
 js = f'const BOOK = {json.dumps(cfg)};\n' + open(os.path.join(ASSETS, 'app.js'), encoding='utf8').read()
 hero = book.get('hero', '规则书整理版，按对局顺序重新编排。规则做了改写，含义和数值以原文为准。')

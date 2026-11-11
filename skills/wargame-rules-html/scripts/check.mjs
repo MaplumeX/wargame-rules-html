@@ -87,6 +87,46 @@ const hits = await ev(`(()=>{const q=document.querySelector('#q');q.value=${JSON
 expect('搜索有结果', hits > 0, `“${term}” ${hits} 条`);
 await ev(`(()=>{const q=document.querySelector('#q');q.value='';q.dispatchEvent(new Event('input'))})()`);
 
+// 搜索面板：快捷键打开，方向键选择，回车跳转，然后用返回按钮回到原处
+const pal = await ev(`(async()=>{
+  const q=document.querySelector('#q'),p=document.querySelector('#pal'),back=document.querySelector('#back');
+  scrollTo(0,0);
+  window.dispatchEvent(new KeyboardEvent('keydown',{key:'/'}));
+  const opened=p.open;
+  q.value=${JSON.stringify(term)};q.dispatchEvent(new Event('input'));
+  const n=document.querySelectorAll('#results .r').length;
+  q.dispatchEvent(new KeyboardEvent('keydown',{key:'ArrowDown'}));
+  const sel=document.querySelector('#results .r.sel');
+  const moved=n<2||sel===document.querySelectorAll('#results .r')[1];
+  return {opened,moved,want:sel&&sel.getAttribute('href')};
+})()`);
+await sleep(200); await shot('desktop-search.jpg');
+const picked = await ev(`(async()=>{
+  const q=document.querySelector('#q'),p=document.querySelector('#pal'),back=document.querySelector('#back');
+  q.dispatchEvent(new KeyboardEvent('keydown',{key:'Enter'}));
+  await new Promise(r=>setTimeout(r,300));
+  const there={closed:!p.open,hash:location.hash,back:!back.hidden,y:scrollY};
+  document.querySelector('#back-go').click();
+  await new Promise(r=>setTimeout(r,300));
+  return {...there,home:scrollY,gone:back.hidden};
+})()`);
+expect('搜索面板可以用键盘打开、选择和跳转', pal.opened && pal.moved && picked.closed && picked.hash === pal.want, picked.hash);
+expect('跳转后可以返回原处', picked.back && picked.gone && picked.home === 0 && picked.y > 0, `${picked.y} → ${picked.home}`);
+
+const xr = await ev(`(async()=>{
+  const a=document.querySelector('main .xref');if(!a)return null;
+  a.scrollIntoView({block:'center'});await new Promise(r=>setTimeout(r,200));
+  const top=a.getBoundingClientRect().top;
+  a.click();await new Promise(r=>setTimeout(r,300));
+  const hash=location.hash,label=document.querySelector('#back-t').textContent;
+  document.querySelector('#back-go').click();await new Promise(r=>setTimeout(r,300));
+  return {ok:hash===a.getAttribute('href')&&label.length>0,drift:Math.abs(a.getBoundingClientRect().top-top),label};
+})()`);
+if (xr !== null) expect('点引用跳转后返回，引用回到原来的位置', xr.ok && xr.drift < 2, `返回 ${xr.label}`);
+
+const cks = await ev(`(()=>{const b=document.querySelector('.ck');if(!b)return null;b.click();const on=b.getAttribute('aria-checked')==='true'&&!b.closest('.phase-card,[data-turnflow]').querySelector('.ck-reset').hidden;document.querySelector('.ck-reset:not([hidden])').click();return [on,document.querySelectorAll('.ck[aria-checked="true"]').length]})()`);
+if (cks !== null) expect('清单步骤可以勾选和清空', cks[0] === true && cks[1] === 0);
+
 const ex = await ev(`(()=>{const all=document.querySelectorAll('details.ex').length;document.querySelector('#t-ex').click();const n=[...document.querySelectorAll('details.ex')].filter(d=>d.open).length;document.querySelector('#t-ex').click();return [n,all]})()`);
 expect('示例可以全部展开', ex[0] === ex[1], `${ex[0]}/${ex[1]}`);
 
@@ -101,6 +141,8 @@ if (turns) {
   const t = await ev(`(()=>{const b=document.querySelector('[data-turn="${turns}"]');b.click();return [document.querySelector('#turn-chip').textContent,b.getAttribute('aria-pressed'),document.querySelectorAll('tr.now').length]})()`);
   expect('回合选择生效', t[1] === 'true' && t[2] === 1 && t[0].includes(String(turns)), t[0]);
   await ev(`document.querySelector('.tt-all').click()`);
+  const step = await ev(`(()=>{const n=document.querySelector('#turn-next'),c=document.querySelector('#turn-chip'),k=document.querySelector('.ck');n.click();const first=c.textContent;if(k)k.click();n.click();const r=[first,c.textContent,document.querySelectorAll('.ck[aria-checked="true"]').length];document.querySelector('.tt-all').click();return r})()`);
+  expect('顶栏可以推进回合，换回合时清空勾选', step[0].includes('1') && (turns < 2 || step[1].includes('2')) && step[2] === 0, step[1]);
 }
 
 const toc = await ev(`(async()=>{const gs=[...document.querySelectorAll('.t-group')];if(!gs.length)return null;const g=gs[gs.length>1?1:0];const p=document.getElementById(g.dataset.part);scrollTo(0,p.getBoundingClientRect().top+scrollY-60);await new Promise(r=>setTimeout(r,400));const cur=gs.filter(x=>x.classList.contains('cur'));const hidden=[...document.querySelectorAll('.t-ch')].filter(x=>!x.getClientRects().length).length;return cur.length===1&&cur[0]===g&&hidden===0})()`);
@@ -118,6 +160,22 @@ const wide = await ev(`[...document.querySelectorAll('.tw')].filter(t=>t.scrollW
 console.log(`提示  手机上需要左右滑动的表格：${wide} 张`);
 await ev(`scrollTo(0,0)`); await sleep(300); await shot('mobile-top.jpg');
 if (parts.length > 1) { const y = await ev(`Math.round(document.querySelectorAll('.part')[1].getBoundingClientRect().top+scrollY)`); await ev(`scrollTo(0,${y - 100})`); await sleep(250); await shot('mobile-part.jpg'); }
+
+// 触屏上点引用：先在底部预览，再决定是否跳过去
+const peek = await ev(`(async()=>{
+  const a=document.querySelector('main .xref');if(!a)return null;
+  a.scrollIntoView({block:'center'});await new Promise(r=>setTimeout(r,200));
+  const before=location.hash,p=document.querySelector('#peek');
+  document.body.dispatchEvent(new PointerEvent('pointerdown',{pointerType:'touch',bubbles:true}));
+  a.click();
+  return {open:p.open,stay:location.hash===before,text:document.querySelector('#pk-t').textContent.length>0,want:a.getAttribute('href')};
+})()`);
+if (peek !== null) {
+  await sleep(300); await shot('mobile-peek.jpg');
+  const went = await ev(`(async()=>{document.querySelector('#pk-go').click();await new Promise(r=>setTimeout(r,300));const r=[document.querySelector('#peek').open,location.hash,document.querySelector('#back').hidden];window.dispatchEvent(new KeyboardEvent('keydown',{key:'Shift'}));return r})()`);
+  expect('触屏上点引用先弹出预览，再跳转', peek.open && peek.stay && peek.text && went[0] === false && went[1] === peek.want && went[2] === false, went[1]);
+  await shot('mobile-back.jpg');
+}
 
 expect('页面没有脚本错误', jsErrors.length === 0, jsErrors.slice(0, 3).join(' | '));
 console.log('截图目录：' + shots);

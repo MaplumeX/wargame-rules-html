@@ -9,6 +9,7 @@
   "page_offset": 1,
   "last_printed_page": 32,
   "rule_number": "\\d+\\.\\d+(?:\\.\\d+)*",
+  "aliases": [["ZOC", "控制区", "Zone of Control"]],
   "parts": [],
   "turns": {}
 }
@@ -23,6 +24,7 @@
 | `page_offset` | PDF 页号减印刷页码。封面占一页而正文从第 1 页编起时为 1 |
 | `first_printed_page`、`last_printed_page` | “原文”查看器可翻到的范围 |
 | `rule_number` | 规则号的正则。规则书用 `A1.2` 时可写 `[A-Z]\\d+(?:\\.\\d+)*` |
+| `aliases` | 搜索别名。每组是几个互为同义的词，搜其中一个也会找到写着另外几个的规则。收录原文术语、缩写和玩家的习惯叫法 |
 | `parts` | 编排，省略时全部章节放在一个部分 |
 | `turns` | 回合表，省略时不生成回合轨和日历 |
 

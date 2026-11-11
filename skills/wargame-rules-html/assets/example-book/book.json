@@ -3,6 +3,7 @@
   "eyebrow": "示例规则书 · 虚构游戏",
   "hero": "这是一本虚构的小规则书，用来展示章节稿的全部写法。",
   "storage_key": "example-river",
+  "aliases": [["炮击", "火力支援", "bombardment"]],
   "parts": [
     {"id": "setup", "short": "开局", "title": "开局准备", "sub": "摆放单位", "items": ["1.0"]},
     {"id": "flow", "short": "流程", "title": "回合流程", "sub": "选当前回合，只看这一回合要做的事", "items": ["2.0", {"ref": "@cal", "hex": "回合日历", "num": "日历"}]},
